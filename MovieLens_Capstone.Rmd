@@ -122,11 +122,34 @@ For the development the recommedation algorithm we can use only the existing dat
 ####Movies
 
 
+
 ####Users
 
 ```{r usersratings}
+rating_summary_pro_user <- edx %>% group_by(userId) %>% summarise(n = n(), avgRating=mean(rating), sdRating=sd(rating))
+max(rating_summary_pro_user$n)
+min(rating_summary_pro_user$n)
 
+rating_summary_pro_user %>% ggplot(aes(n)) + geom_histogram(color="black", binwidth = 5)
+rating_summary_pro_user %>% filter(n < 500) %>% ggplot(aes(n)) + geom_histogram(color="black", binwidth = 5)
+rating_summary_pro_user %>% filter(n > 500) %>% ggplot(aes(n)) + geom_histogram(color="black", binwidth = 5)
 ```
+
+We can take a look to the standard deviation of the user ratings.
+```{r usersratings_sd}
+rating_summary_pro_user %>% ggplot(aes(sdRating)) + geom_histogram(color="black", binwidth = 0.1)
+```
+
+As we see, most of the user give a rating in 0,9 - 1 star standard deviation to the user average rating. Additionally we see, that there are some entries with zero standard deviation. 
+That means, some user give always the same rating for every movies they rate. We can use this information for the prediction: if we have to predict the movie rating for a this user, we can predict the average movie rating calculated for the user from the training set without considerate any further information.
+
+The count of the user with 0 standard deviation ratings in the traing set is:
+
+```{r users_with_sd0}
+sum(rating_summary_pro_user$sdRating == 0)
+```
+
+
 
 ####Model
 Based on the movie and user data analysis we can develop a prediction model.
@@ -134,19 +157,29 @@ Based on the movie and user data analysis we can develop a prediction model.
 If we don't have any information about the movie and the user in the test set (new movie and new user), we can use the overall avarage rating from the training set rating data.
 This predection will minimase the RSME value for unknown movies and user.
 
+
 If we have rating data about the movie to predict we can assume, that the abriviation of the movie from the overall average shows the quality of the movie. We can use this information to tune the prediction value.
+
+If we have rating data about the user to predict we can assume, that the abriviation of the user from the overall average corrected with the movie bias shows the rating mood of the user.
 
 
 
 
 ## Implementation & result
 
+For the regularised movie and user bias calculation we need the lambda penality term that minimises the RMSE value.
+To find the optimum value for the penality terms we may only use the train set, therefore we will use cross fold validation for this porpuse.
+We will calculate the penality terms in two step: first we calculate the penaltiy term for the movie bias and in the second step we calculate the penality term for the user bias using the result from step 1.
+
+The following R code calculates the RMSE value for the given lambda range (0 up to 10, step by 0.25) using 5 fold cross validation:
+
 ```{r calculate_regularisation}
 
 #The value range for the possible lambda parameter
 lambdas <- seq(0, 10, 0.25)
 
-#Function to calculate the optimum lambda parameter for the movie bias useing two set of data (train and tes)
+#Function to calculate the optimum lambda parameter for the movie bias 
+#using two set of data (train and tes)
 rmses_for_movie_lambdas <- function(train, test){
   
   #data frame variable for collecting the result data
@@ -158,7 +191,8 @@ rmses_for_movie_lambdas <- function(train, test){
   
   #loop for all lambdas in the provided range
   for (l in lambdas){
-    #calculating predicted values for the test set using the actual lambda value from the range
+    #calculating predicted values for the test set using 
+    #the actual lambda value from the range
     predicted_ratings <- test %>%
       left_join(movie_sum, by='movieId') %>%
       mutate(b_i = s / (n_i + l)) %>%
@@ -172,11 +206,13 @@ rmses_for_movie_lambdas <- function(train, test){
     RMSE_all <- bind_rows(RMSE_all, data.frame(lambda = l, rmse = rmse_akt))
   }
   #return the result data frame
-  # the result will contain the RMSE value for all the lambda values from the provided lambda range
+  #the result will contain the RMSE value for all the lambda values 
+  #from the provided lambda range
   return(RMSE_all)
 }
 
-#Function to calculate the optimum lambda parameter for the movie bias useing two set of data (train and tes)
+#Function to calculate the optimum lambda parameter for the movie bias 
+#using two set of data (train and tes)
 #This function needs the caluclated optimal lambda value for the movie bias
 rmses_for_user_lambdas <- function(train, test, movie_lambda){
   
@@ -184,7 +220,8 @@ rmses_for_user_lambdas <- function(train, test, movie_lambda){
   RMSE_all = data.frame(lambda = numeric(), rmse = numeric())
   #overall average of the rating in the train set
   avg <- mean(train$rating)
-  #the movie bias values for the train set (bias calculated with the provieded optimal lambda value for the movie bias)
+  #the movie bias values for the train set (bias calculated 
+  #with the provieded optimal lambda value for the movie bias)
   b_movie <- train %>%
     group_by(movieId) %>%
     summarize(b_movie = sum(rating - avg) / (n() + movie_lambda))
@@ -197,7 +234,8 @@ rmses_for_user_lambdas <- function(train, test, movie_lambda){
   
   #loop for all lambdas in the provided range
   for (l in lambdas){
-    #calculating predicted values for the test set using the actual lambda value from the range
+    #calculating predicted values for the test set using 
+    #the actual lambda value from the range
     predicted_ratings <- test %>%
       left_join(b_movie, by='movieId') %>%
       left_join(user_sum, by='userId') %>%
@@ -211,7 +249,8 @@ rmses_for_user_lambdas <- function(train, test, movie_lambda){
     RMSE_all <- bind_rows(RMSE_all, data.frame(lambda = l, rmse = rmse_akt))
   }
   #return the result data frame
-  # the result will contain the RMSE value for all the lambda values from the provided lambda range
+  # the result will contain the RMSE value for all 
+  #the lambda values from the provided lambda range
   return(RMSE_all)
 }
 
@@ -226,7 +265,6 @@ cross_validation_movie <- function(trainset, lambdas, cv_n){
   for (i in c(1:cv_n)){
     
     part_count = data_count / cv_n
-    cat( "Run: ", i, " Test Part: ", str_pad((trunc((i-1) * part_count) + 1),width = 8,side = "left"), " ",  trunc(i * part_count), "\n")
     idx = c(   (trunc((i-1) * part_count) + 1) : trunc(i * part_count) )
     tmp = trainset_randomised[idx,]
     train = trainset_randomised[-idx,]
@@ -237,7 +275,6 @@ cross_validation_movie <- function(trainset, lambdas, cv_n){
     train <- rbind(train, removed)
     RMSE_Lambdas <- rmses_for_movie_lambdas(train, test)
     RMSE_all <- bind_rows(RMSE_all,RMSE_Lambdas %>% mutate(cv = i))
-    cat("\n")
   }
   return(RMSE_all)
 }
@@ -252,7 +289,6 @@ cross_validation_user <- function(trainset, lambdas, cv_n, movie_lambda){
   for (i in c(1:cv_n)){
     
     part_count = data_count / cv_n
-    cat( "Run: ", i, " Test Part: ", str_pad((trunc((i-1) * part_count) + 1),width = 8,side = "left"), " ",  trunc(i * part_count), "\n")
     idx = c(   (trunc((i-1) * part_count) + 1) : trunc(i * part_count) )
     tmp = trainset_randomised[idx,]
     train = trainset_randomised[-idx,]
@@ -263,23 +299,33 @@ cross_validation_user <- function(trainset, lambdas, cv_n, movie_lambda){
     train <- rbind(train, removed)
     RMSE_Lambdas <- rmses_for_user_lambdas(train, test, movie_lambda)
     RMSE_all <- bind_rows(RMSE_all,RMSE_Lambdas %>% mutate(cv = i))
-    cat("\n")
   }
   return(RMSE_all)
 }
+```
+
+After calculating the RMSE values, we can evaluate the lambda for the minimum RMSE value.
+We can viualise the result with a plot too:
+
+```{r regularisation_lambda_selection}
 
 res <- cross_validation_movie(edx, lambdas,5)
 res <- res %>% group_by(lambda) %>% summarise(avg_rmse=mean(rmse))
-qplot(main=c('Lambda for movies'), lambdas, res$avg_rmse)
+qplot(main=c('Lambda for movies', 'RMSE', 'Lambda'), lambdas, res$avg_rmse)
 movie_lambda = lambdas[which.min(res$avg_rmse)]
+cat("Optimum lambda value for the movie bias: ", movie_lambda)
 
 res <- cross_validation_user(edx, lambdas,5, movie_lambda)
 res <- res %>% group_by(lambda) %>% summarise(avg_rmse=mean(rmse))
-qplot(main=c('Lambda for user'), lambdas, res$avg_rmse)
+qplot(main=c('Lambda for user', 'RMSE', 'Lambda'), lambdas, res$avg_rmse)
 user_lambda = lambdas[which.min(res$avg_rmse)]
+cat("Optimum lambda for the user bias: ", user_lambda)
 ```
 
-Regularisation
+The rating prediction can be calculated with th following R code:
+
+```{r calculate_prediction}
+```
 
 
 ## Conclusion
