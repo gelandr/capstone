@@ -5,12 +5,23 @@ RMSE <- function(actual_rating, predicted_rating){
 
 avg_rating = mean(edx$rating)
 
+#genres_lambda = 3
 #movie_lambda = 2.25
 #user_lambda = 5
+
+#bias based on the genred
+genre_bias <- edx %>% left_join(movie_data,by="movieId") %>% group_by(genres_txt) %>% summarise(b_genre = mean(rating - avg_rating))
+genre_bias_reg <- edx %>% left_join(movie_data,by="movieId") %>% group_by(genres_txt) %>% summarise(b_genre = sum(rating - avg_rating)/(n() + genres_lambda))
 
 #bias based on the movies
 movie_bias <- edx %>% group_by(movieId) %>% summarise(b_movie = mean(rating - avg_rating))
 movie_bias_reg <- edx %>% group_by(movieId) %>% summarise(b_movie = sum(rating - avg_rating)/(n() + movie_lambda))
+
+#prediction based on avg and genres bias
+prediction0 <- validation %>% left_join(movie_data, by="movieId") %>% left_join(genre_bias,by="genres_txt") %>% mutate(pred = avg_rating + b_genre)
+prediction0b <- validation %>% left_join(movie_data, by="movieId") %>% left_join(genre_bias_reg,by="genres_txt") %>% mutate(pred = avg_rating + b_genre)
+
+
 
 #prediction based on avg and movie bias
 prediction1 <- validation %>% left_join(movie_bias,by="movieId") %>% mutate(pred = avg_rating + b_movie)
@@ -46,6 +57,10 @@ prediction6[prediction6$pred < 0.5,]$pred = 0.5
 #performance of the avarage
 print("Avarage")
 RMSE(validation$rating, avg_rating)
+print("RMSE for genre effect")
+RMSE(validation$rating, prediction0$pred)
+print("RMSE for genre effect regularised")
+RMSE(validation$rating, prediction0b$pred)
 print("RMSE for movie effect")
 RMSE(validation$rating, prediction1$pred)
 print("RMSE for movie effect regulasired")
