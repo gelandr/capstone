@@ -21,8 +21,6 @@ movie_bias_reg <- edx %>% group_by(movieId) %>% summarise(b_movie = sum(rating -
 prediction0 <- validation %>% left_join(movie_data, by="movieId") %>% left_join(genre_bias,by="genres_txt") %>% mutate(pred = avg_rating + b_genre)
 prediction0b <- validation %>% left_join(movie_data, by="movieId") %>% left_join(genre_bias_reg,by="genres_txt") %>% mutate(pred = avg_rating + b_genre)
 
-
-
 #prediction based on avg and movie bias
 prediction1 <- validation %>% left_join(movie_bias,by="movieId") %>% mutate(pred = avg_rating + b_movie)
 #prediction based on avg and movie bias regulated
