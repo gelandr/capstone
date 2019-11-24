@@ -39,12 +39,27 @@ genres_rating %>% ggplot(aes(n)) + geom_histogram(color="black", binwidth = 1000
     ggtitle("Genres rating count") +
     xlab("Rating count") + ylab("count")
 
-#plot the avg rating pro genre with more than 10000 ratings ordered by avg rating
-genres_rating %>% filter(n>=25000) %>% mutate(genres = reorder(genres, avg)) %>% 
+#plot the avg rating the 50 most rated genres combination ordered by avg rating
+head(genres_rating %>% arrange(desc(n)),50) %>% mutate(genres = reorder(genres, avg)) %>% 
   ggplot(aes(genres,avg)) + geom_point() +
-  ggtitle("genres avg rating (rating count >= 10.000") +
-  xlab("Genres") + ylab("Avg rating") + 
+  ggtitle("Avg rating for the 50 most rated genre combinations") +
+  xlab("Genre combination") + ylab("Avg rating") + 
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+max(genres_rating %>% filter(n>=25000) %>% .$avg)
+min(genres_rating %>% filter(n>=25000) %>% .$avg)
+
+top_genre = genres_rating[which.max(genres_rating$n),]$genres
+top_genre_avg = genres_rating[which.max(genres_rating$n),]$avg
+
+head(rating_summary_pro_movie %>% inner_join(movie_data, by="movieId") %>%
+    filter(genres==top_genre) %>% arrange(desc(n)),50) %>%
+    ggplot(aes(title,avg)) + geom_point() +
+    geom_line(aes(title,top_genre_avg), group=1) +
+    ggtitle(paste("Rating for the top 50 most rated movies in the genre '", top_genre, "'")) +
+    xlab("Genres") + ylab("Avg rating") + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
 
 #List of the genres order by avg rating for genres with more than 10.000 ratings
 genres_rating %>% filter(n>=10000) %>% arrange(desc(avg))

@@ -59,14 +59,15 @@ rmses_for_user_lambdas <- function(train, test){
     summarize(b_genres = sum(rating - avg) / (n() + genres_lambda))
   
   b_movie <- train %>%
+    left_join(b_genres, by="genres") %>%
     group_by(movieId) %>%
-    summarize(b_movie = sum(rating - b_genres - avg) / (n() + movie_lambda))
+    summarize(b_movie = sum(rating - avg - b_genres) / (n() + movie_lambda))
   
   user_sum <- train %>% 
-    left_join(b_movie, by="movieId") %>%
     left_join(b_genres, by="genres") %>%
+    left_join(b_movie, by="movieId") %>%
     group_by(userId) %>%
-    summarize(s = sum(rating - b_movie - b_genres - avg), n_i= n())
+    summarize(s = sum(rating - avg - b_genres - b_movie), n_i= n())
   
   for (l in lambdas){
     predicted_ratings <- test %>%
@@ -75,6 +76,48 @@ rmses_for_user_lambdas <- function(train, test){
       left_join(user_sum, by='userId') %>%
       mutate(b_u = s / (n_i + l)) %>%
       mutate(pred = avg + b_genres + b_movie + b_u) %>%
+      pull(pred)
+    
+    rmse_akt =RMSE(predicted_ratings, test$rating)
+    RMSE_all <- bind_rows(RMSE_all, data.frame(lambda = l, rmse = rmse_akt))
+  }
+  return(RMSE_all)
+}
+
+#Usergenre lambda with cross validation
+rmses_for_usergenre_lambdas <- function(train, test){
+  
+  RMSE_all = data.frame(lambda = numeric(), rmse = numeric())
+  avg <- mean(train$rating)
+  b_genres <- train %>%  
+    group_by(genres) %>%
+    summarize(b_genres = sum(rating - avg) / (n() + genres_lambda))
+  
+  b_movie <- train %>%
+    left_join(b_genres, by="genres") %>%
+    group_by(movieId) %>%
+    summarize(b_movie = sum(rating - avg - b_genres) / (n() + movie_lambda))
+  
+  b_user <- train %>% 
+    left_join(b_genres, by="genres") %>% 
+    left_join(b_movie, by="movieId") %>%  
+    group_by(userId) %>% 
+    summarise(b_user = sum(rating - avg - b_genres - b_movie)/(n()+user_lambda))
+  
+  usergenre_sum <- train %>% 
+    left_join(b_genres, by="genres") %>%
+    left_join(b_movie, by="movieId") %>%
+    group_by(userId, genres) %>%
+    summarize(s = sum(rating - avg - b_genres - b_movie - b_user), n_i= n())
+  
+  for (l in lambdas){
+    predicted_ratings <- test %>%
+      left_join(b_genres, by="genres") %>%
+      left_join(b_movie, by='movieId') %>%
+      left_join(b_user, by='userId') %>%
+      left_join(usergenre_sum, by=c('userId', 'genres')) %>%
+      mutate(b_ug = avg - b_genres - b_movie - b_user - s / (n_i + l)) %>%
+      mutate(pred = avg + b_genres + b_movie + b_user + b_ug) %>%
       pull(pred)
     
     rmse_akt =RMSE(predicted_ratings, test$rating)
@@ -101,7 +144,7 @@ rmses_for_sd_ranges <- function(train, test, range){
     left_join(b_movie, by="movieId") %>%
     left_join(b_genres, by="genres") %>%
     group_by(userId) %>%
-    summarize(b_user = sum(rating - b_movie - b_genres - avg) / (n() + user_lambda), sd_userrating=sd(rating), avg_user=mean(rating))
+    summarize(b_user = sum(rating - avg - b_genres - b_movie) / (n() + user_lambda), sd_userrating=sd(rating), avg_user=mean(rating))
   
   for (r in range){
     predicted_ratings <- test %>%
@@ -136,6 +179,13 @@ res <- res %>% group_by(lambda) %>% summarise(avg_rmse=mean(rmse))
 qplot(main=c('Lambda for user', 'RMSE', 'Lambda'), lambdas, res$avg_rmse)
 user_lambda = lambdas[which.min(res$avg_rmse)]
 cat("Lambda for user regulaisration: ", user_lambda)
+
+
+#res <- cross_validation(edx, 5, rmses_for_usergenre_lambdas)
+#res <- res %>% group_by(lambda) %>% summarise(avg_rmse=mean(rmse))
+#qplot(main=c('Lambda for usergenre', 'RMSE', 'Lambda'), lambdas, res$avg_rmse)
+#usergenre_lambda = lambdas[which.min(res$avg_rmse)]
+#cat("Lambda for usergenre regulaisration: ", usergenre_lambda)
 
 
 sd_range <- seq(0, 0.5, 0.01)

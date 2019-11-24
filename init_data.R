@@ -41,7 +41,7 @@ close(fl)
 colnames(movie_data) <- c("movieId", "title", "genres")
 movie_data <- as.data.frame(movie_data) %>% mutate(movieId = as.numeric(levels(movieId))[movieId],
                                            title = as.character(title),
-                                           genres = as.character(genres))
+                                           genres = as.factor(genres))
 
 # Validation set will be 10% of MovieLens data
 set.seed(1, sample.kind="Rounding")
@@ -56,7 +56,7 @@ validation <- temp %>%
   semi_join(edx, by = "userId")
 
 # Add rows removed from validation set back into edx set
-removed <- anti_join(temp, validation)
+removed <- anti_join(temp, validation, by=c("userId", "movieId"))
 edx <- rbind(edx, removed)
 
 #add movie year as column
